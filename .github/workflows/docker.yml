@@ -24,11 +24,11 @@ jobs:
 
       - name: Build image
         run: |
-          docker build -t ${{ secrets.DOCKER_USERNAME }}/banquito-sw-enrutamiento:latest -f docker/Dockerfile .
+          docker build -t ${{ secrets.DOCKER_USERNAME }}/banquito-core-contable:latest -f docker/Dockerfile .
 
       - name: Push image
         run: |
-          docker push ${{ secrets.DOCKER_USERNAME }}/banquito-sw-enrutamiento:latest
+          docker push ${{ secrets.DOCKER_USERNAME }}/banquito-core-contable:latest
 
       - name: Trigger Infra Deploy
         run: |
@@ -37,8 +37,8 @@ jobs:
             -H "Accept: application/vnd.github+json" \
             https://api.github.com/repos/CamilaParedes23/banquito-infra/dispatches \
             -d '{
-              "event_type": "deploy-switch-back",
+              "event_type": "deploy-core-back",
               "client_payload": {
-                "service": "banquito-sw-enrutamiento"
+                "service": "banquito-core-contable"
               }
             }'
