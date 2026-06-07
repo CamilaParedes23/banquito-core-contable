@@ -24,7 +24,7 @@ jobs:
 
       - name: Build image
         run: |
-          docker build -t ${{ secrets.DOCKER_USERNAME }}/banquito-core-contable:latest -f docker/Dockerfile .
+          docker build -t ${{ secrets.DOCKER_USERNAME }}/banquito-core-contable:latest -f docker/dockerfile .
 
       - name: Push image
         run: |
