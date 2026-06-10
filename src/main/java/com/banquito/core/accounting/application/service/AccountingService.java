@@ -69,6 +69,14 @@ public class AccountingService {
     @Transactional
     public JournalEntryResponse crearAsiento(JournalEntryRequest request) {
         validarFechaContableAbierta(request.accountingDate());
+        if (request.correlationId() != null && !request.correlationId().isBlank()
+                && request.operationType() != null && !request.operationType().isBlank()) {
+            var existing = asientoRepository.findFirstByUuidCorrelacionAndTipoOperacionAndEstadoOrderByTimestampRegistroAsc(
+                    request.correlationId(), request.operationType(), EstadoAsientoContableEnum.REGISTRADO);
+            if (existing.isPresent()) {
+                return AccountingMapper.toJournalEntry(existing.get());
+            }
+        }
         if (request.lines() == null || request.lines().size() < 2) throw new BusinessException("ACCOUNTING_JOURNAL_LINES_REQUIRED", "El asiento debe tener al menos dos líneas", HttpStatus.BAD_REQUEST);
         ContextoOrigenAsientoEnum contexto = parseEnum(ContextoOrigenAsientoEnum.class, request.originContext(), "ACCOUNTING_INVALID_ORIGIN_CONTEXT");
         BigDecimal totalDebitos = BigDecimal.ZERO;
