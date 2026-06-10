@@ -1,19 +1,34 @@
 # Maven / Java
 target/
 *.class
+*.jar
+*.war
+*.ear
 
-# IntelliJ IDEA
+# IDE
 .idea/
+.vscode/
 *.iml
+.project
+.classpath
+.settings/
 
-# Variables / logs
-.env
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs / runtime
+logs/
 *.log
+
+# Env / secrets
+.env
+.env.*
+!.env.example
+
+# Docker local
+.docker/
 
 # Carpetas locales no versionadas
 /postman/
 /sql/
-
-# Sistema operativo
-.DS_Store
-Thumbs.db

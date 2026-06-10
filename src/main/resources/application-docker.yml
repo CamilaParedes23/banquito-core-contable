@@ -1,0 +1,32 @@
+server:
+  port: ${SERVER_PORT:8084}
+
+spring:
+  datasource:
+    url: ${ACCOUNTING_DB_URL:${DB_URL:jdbc:mysql://mysql-accounting:3306/banquito_core_accounting_db?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=America/Guayaquil}}
+    username: ${ACCOUNTING_DB_USER:${DB_USERNAME:root}}
+    password: ${ACCOUNTING_DB_PASSWORD:${DB_PASSWORD:${MYSQL_ROOT_PASSWORD:BanQuitoRoot2026!}}}
+  jpa:
+    hibernate:
+      ddl-auto: ${JPA_DDL_AUTO:validate}
+      naming:
+        physical-strategy: org.hibernate.boot.model.naming.PhysicalNamingStrategyStandardImpl
+        implicit-strategy: org.hibernate.boot.model.naming.ImplicitNamingStrategyJpaCompliantImpl
+  flyway:
+    enabled: ${FLYWAY_ENABLED:true}
+    baseline-on-migrate: ${FLYWAY_BASELINE_ON_MIGRATE:true}
+    baseline-version: ${FLYWAY_BASELINE_VERSION:1}
+
+banquito:
+  security:
+    jwt:
+      issuer: ${JWT_ISSUER:banquito-identity-access}
+      secret: ${JWT_SECRET:BanQuitoIdentityJwtSecretKeyForDevelopmentOnlyChangeMe2026}
+  accounting:
+    default-cutoff-time: ${ACCOUNTING_DEFAULT_CUTOFF_TIME:20:00:00}
+  integration:
+    document-service-url: ${DOCUMENT_SERVICE_URL:http://document-service:8086}
+    notification-service-url: ${NOTIFICATION_SERVICE_URL:http://notification-service:8087}
+  grpc:
+    server:
+      port: ${GRPC_SERVER_PORT:9094}

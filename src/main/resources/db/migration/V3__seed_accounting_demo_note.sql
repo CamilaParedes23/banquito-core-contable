@@ -1,0 +1,3 @@
+-- Demo data for accounting-service is intentionally minimal.
+-- Use POST /api/v1/accounting/accounting-dates/{date}/open to create a test accounting date.
+-- Add V4+ migrations for larger accounting scenarios when required.
