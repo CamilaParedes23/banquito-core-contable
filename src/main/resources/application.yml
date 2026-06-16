@@ -59,6 +59,7 @@ banquito:
       secret: ${JWT_SECRET:BanQuitoIdentityJwtSecretKeyForDevelopmentOnlyChangeMe2026}
   accounting:
     default-cutoff-time: ${ACCOUNTING_DEFAULT_CUTOFF_TIME:20:00:00}
+    report-directory: ${ACCOUNTING_REPORT_DIRECTORY:./reports/eod}
   integration:
     document-service-url: ${DOCUMENT_SERVICE_URL:http://document-service:8086}
     notification-service-url: ${NOTIFICATION_SERVICE_URL:http://notification-service:8087}

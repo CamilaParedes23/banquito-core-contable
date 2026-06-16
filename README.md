@@ -76,3 +76,8 @@ Revisar `.env.example`. Para nube no usar `localhost`; usar nombres internos de 
 - Integrar generación documental de balance/EOD con `document-service`.
 - Integrar notificaciones EOD con `notification-service`.
 - Seeds robustos de jornadas, asientos demo y balances para pruebas E2E.
+
+## Seguridad y autorización agregada
+
+Los endpoints REST contables quedan restringidos a roles internos (`ADMIN_SEGURIDAD`, `OPERADOR_CONTABLE`) o clientes técnicos con scopes contables (`core.accounting.entry.create`, `core.accounting.eod.run`). Los clientes finales no deben consumir este microservicio directamente.
+

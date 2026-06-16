@@ -32,3 +32,4 @@ logs/
 # Carpetas locales no versionadas
 /postman/
 /sql/
+docs/

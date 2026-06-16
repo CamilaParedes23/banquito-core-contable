@@ -15,9 +15,11 @@ RUN apt-get update \
     && apt-get install -y --no-install-recommends curl \
     && rm -rf /var/lib/apt/lists/* \
     && addgroup --system banquito \
-    && adduser --system --ingroup banquito banquito
+    && adduser --system --ingroup banquito banquito \
+    && mkdir -p /reports/eod \
+    && touch /reports/eod/.volume-initialized
 COPY --from=build /workspace/target/*.jar app.jar
-RUN chown -R banquito:banquito /app
+RUN chown -R banquito:banquito /app /reports
 USER banquito
 
 ENV SERVER_PORT=8084 \

@@ -15,7 +15,6 @@ import org.springframework.transaction.annotation.Transactional;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalTime;
-import java.util.Comparator;
 import java.util.List;
 
 @Service
@@ -29,6 +28,7 @@ public class AccountingService {
     private final BalanceComprobacionRepository balanceRepository;
     private final AuditoriaAccountingService auditoriaService;
     private final OutboxEventService outboxEventService;
+    private final TrialBalanceCsvService trialBalanceCsvService;
 
     @Transactional(readOnly = true)
     public List<ChartAccountResponse> listarPlanCuentas() {
@@ -59,10 +59,20 @@ public class AccountingService {
 
     @Transactional
     public AccountingDateResponse cerrarFechaContable(LocalDate date) {
-        JornadaContable jornada = jornadaRepository.findByFechaContable(date).orElseThrow(() -> new BusinessException("ACCOUNTING_DATE_NOT_FOUND", "Fecha contable no encontrada", HttpStatus.NOT_FOUND));
-        if (jornada.getEstado() == EstadoJornadaContableEnum.CERRADA) return AccountingMapper.toAccountingDate(jornada);
-        jornada.cerrar("Cierre manual");
-        auditoriaService.registrar(CorrelationIdHolder.get(), "CLOSE_ACCOUNTING_DATE", "JORNADA_CONTABLE", date.toString(), ResultadoAuditoriaAccountingEnum.OK, null);
+        JornadaContable jornada = jornadaRepository.findByFechaContable(date)
+                .orElseThrow(() -> new BusinessException("ACCOUNTING_DATE_NOT_FOUND", "Fecha contable no encontrada", HttpStatus.NOT_FOUND));
+        if (jornada.getEstado() == EstadoJornadaContableEnum.CERRADA) {
+            return AccountingMapper.toAccountingDate(jornada);
+        }
+        ProcesoEod eod = eodRepository.findTopByFechaContableOrderByFechaInicioDesc(date)
+                .filter(process -> process.getEstado() == EstadoProcesoEodEnum.EXITOSO)
+                .orElseThrow(() -> new BusinessException(
+                        "ACCOUNTING_EOD_REQUIRED_TO_CLOSE_DATE",
+                        "La fecha contable solo puede cerrarse después de un EOD exitoso",
+                        HttpStatus.CONFLICT));
+        jornada.cerrar("Cierre confirmado por EOD " + eod.getUuidEod());
+        auditoriaService.registrar(CorrelationIdHolder.get(), "CLOSE_ACCOUNTING_DATE", "JORNADA_CONTABLE",
+                date.toString(), ResultadoAuditoriaAccountingEnum.OK, null);
         return AccountingMapper.toAccountingDate(jornadaRepository.save(jornada));
     }
 
@@ -125,29 +135,60 @@ public class AccountingService {
 
     @Transactional
     public EodResponse ejecutarEod(LocalDate date) {
-        JornadaContable jornada = jornadaRepository.findByFechaContable(date).orElseThrow(() -> new BusinessException("ACCOUNTING_DATE_NOT_FOUND", "Fecha contable no encontrada", HttpStatus.NOT_FOUND));
-        if (jornada.getEstado() != EstadoJornadaContableEnum.ABIERTA) throw new BusinessException("ACCOUNTING_DATE_NOT_OPEN", "La fecha contable no está abierta", HttpStatus.CONFLICT);
-        jornada.iniciarCierre();
-        ProcesoEod eod = eodRepository.save(ProcesoEod.iniciar(jornada));
-        try {
-            List<AsientoContable> asientos = asientoRepository.findByFechaContableAndEstadoOrderByTimestampRegistroAsc(date, EstadoAsientoContableEnum.REGISTRADO);
-            BigDecimal debitos = BigDecimal.ZERO;
-            BigDecimal creditos = BigDecimal.ZERO;
-            for (AsientoContable asiento : asientos) {
-                for (DetalleAsientoContable d : asiento.getDetalles()) {
-                    if (d.getTipoMovimiento() == TipoMovimientoContableEnum.DEBITO) debitos = debitos.add(d.getMonto()); else creditos = creditos.add(d.getMonto());
+        JornadaContable jornada = jornadaRepository.findByFechaContable(date)
+                .orElseThrow(() -> new BusinessException("ACCOUNTING_DATE_NOT_FOUND", "Fecha contable no encontrada", HttpStatus.NOT_FOUND));
+        if (jornada.getEstado() != EstadoJornadaContableEnum.ABIERTA) {
+            throw new BusinessException("ACCOUNTING_DATE_NOT_OPEN", "La fecha contable no está abierta", HttpStatus.CONFLICT);
+        }
+
+        List<AsientoContable> asientos = asientoRepository.findByFechaContableAndEstadoOrderByTimestampRegistroAsc(
+                date, EstadoAsientoContableEnum.REGISTRADO);
+        BigDecimal debitos = BigDecimal.ZERO;
+        BigDecimal creditos = BigDecimal.ZERO;
+        for (AsientoContable asiento : asientos) {
+            for (DetalleAsientoContable detalle : asiento.getDetalles()) {
+                if (detalle.getTipoMovimiento() == TipoMovimientoContableEnum.DEBITO) {
+                    debitos = debitos.add(detalle.getMonto());
+                } else {
+                    creditos = creditos.add(detalle.getMonto());
                 }
             }
-            BalanceComprobacion balance = generarBalance(eod);
-            eod.exitoso(debitos, creditos);
-            jornada.cerrar("Cierre EOD exitoso. Balance " + balance.getEstado());
-            outboxEventService.registrar(CorrelationIdHolder.get(), "EOD_COMPLETED", "PROCESO_EOD", eod.getUuidEod(), "{\"eodUuid\":\"" + eod.getUuidEod() + "\",\"accountingDate\":\"" + date + "\"}");
-            return AccountingMapper.toEod(eodRepository.save(eod));
-        } catch (RuntimeException ex) {
-            eod.fallido(ex.getMessage());
-            eodRepository.save(eod);
-            throw ex;
         }
+        if (debitos.compareTo(creditos) != 0) {
+            throw new BusinessException(
+                    "ACCOUNTING_EOD_JOURNALS_NOT_BALANCED",
+                    "El EOD no puede finalizar porque los débitos y créditos de la jornada no cuadran",
+                    HttpStatus.CONFLICT);
+        }
+
+        validarSaldosPlanCuentasCuadrados();
+        jornada.iniciarCierre();
+        ProcesoEod eod = eodRepository.save(ProcesoEod.iniciar(jornada));
+        BalanceComprobacion balance = generarBalance(eod);
+        if (balance.getEstado() != EstadoBalanceComprobacionEnum.CUADRADO) {
+            throw new BusinessException(
+                    "ACCOUNTING_TRIAL_BALANCE_NOT_BALANCED",
+                    "El EOD no puede finalizar porque el balance de comprobación está descuadrado",
+                    HttpStatus.CONFLICT);
+        }
+
+        String reportUuid = trialBalanceCsvService.write(balance);
+        balance.setUuidDocumentoCsv(reportUuid);
+        balanceRepository.save(balance);
+        eod.setUuidDocumentoReporte(reportUuid);
+        eod.exitoso(debitos, creditos);
+        jornada.cerrar("Cierre EOD exitoso. Balance CUADRADO");
+        outboxEventService.registrar(
+                CorrelationIdHolder.get(),
+                "EOD_COMPLETED",
+                "PROCESO_EOD",
+                eod.getUuidEod(),
+                "{\"eodUuid\":\"" + eod.getUuidEod() + "\",\"accountingDate\":\"" + date
+                        + "\",\"reportDocumentUuid\":\"" + reportUuid + "\"}");
+        auditoriaService.registrar(
+                CorrelationIdHolder.get(), "RUN_EOD", "PROCESO_EOD", eod.getUuidEod(),
+                ResultadoAuditoriaAccountingEnum.OK, null);
+        return AccountingMapper.toEod(eodRepository.save(eod));
     }
 
     @Transactional(readOnly = true)
@@ -159,25 +200,77 @@ public class AccountingService {
     @Transactional(readOnly = true)
     public TrialBalanceResponse obtenerBalance(LocalDate date) { return AccountingMapper.toTrialBalance(balanceRepository.findTopByFechaContableOrderByFechaGeneracionDesc(date).orElseThrow(() -> new BusinessException("ACCOUNTING_TRIAL_BALANCE_NOT_FOUND", "Balance de comprobación no encontrado", HttpStatus.NOT_FOUND))); }
 
+
+    @Transactional(readOnly = true)
+    public TrialBalanceCsvResponse exportarBalance(LocalDate date) {
+        BalanceComprobacion balance = balanceRepository.findTopByFechaContableOrderByFechaGeneracionDesc(date)
+                .orElseThrow(() -> new BusinessException("ACCOUNTING_TRIAL_BALANCE_NOT_FOUND", "Balance de comprobación no encontrado", HttpStatus.NOT_FOUND));
+        if (balance.getEstado() != EstadoBalanceComprobacionEnum.CUADRADO
+                || balance.getUuidDocumentoCsv() == null
+                || balance.getUuidDocumentoCsv().isBlank()) {
+            throw new BusinessException(
+                    "ACCOUNTING_TRIAL_BALANCE_EXPORT_NOT_AVAILABLE",
+                    "El balance no tiene un reporte CSV válido disponible",
+                    HttpStatus.CONFLICT);
+        }
+        return new TrialBalanceCsvResponse(
+                "balance-comprobacion-" + date + ".csv",
+                trialBalanceCsvService.read(balance.getUuidDocumentoCsv()));
+    }
+
+    private void validarSaldosPlanCuentasCuadrados() {
+        BigDecimal totalDeudor = BigDecimal.ZERO;
+        BigDecimal totalAcreedor = BigDecimal.ZERO;
+        for (CuentaContable cuenta : cuentaRepository.findByEstadoOrderByCodigoContableAsc(EstadoCuentaContableEnum.ACTIVA)) {
+            if (cuenta.getTipoCuenta() != TipoCuentaContableEnum.DETALLE) {
+                continue;
+            }
+            totalDeudor = totalDeudor.add(saldoDeudor(cuenta));
+            totalAcreedor = totalAcreedor.add(saldoAcreedor(cuenta));
+        }
+        if (totalDeudor.compareTo(totalAcreedor) != 0) {
+            throw new BusinessException(
+                    "ACCOUNTING_TRIAL_BALANCE_NOT_BALANCED",
+                    "El EOD no puede finalizar porque el plan de cuentas presenta saldos descuadrados",
+                    HttpStatus.CONFLICT);
+        }
+    }
+
     private BalanceComprobacion generarBalance(ProcesoEod eod) {
         List<CuentaContable> cuentas = cuentaRepository.findByEstadoOrderByCodigoContableAsc(EstadoCuentaContableEnum.ACTIVA);
         BigDecimal totalDeudor = BigDecimal.ZERO;
         BigDecimal totalAcreedor = BigDecimal.ZERO;
         for (CuentaContable c : cuentas) {
             if (c.getTipoCuenta() != TipoCuentaContableEnum.DETALLE) continue;
-            BigDecimal saldo = c.getSaldoActual() == null ? BigDecimal.ZERO : c.getSaldoActual().abs();
-            if (c.getNaturalezaSaldo() == NaturalezaSaldoEnum.DEUDORA) totalDeudor = totalDeudor.add(saldo); else totalAcreedor = totalAcreedor.add(saldo);
+            totalDeudor = totalDeudor.add(saldoDeudor(c));
+            totalAcreedor = totalAcreedor.add(saldoAcreedor(c));
         }
         BalanceComprobacion balance = BalanceComprobacion.crear(eod, totalDeudor, totalAcreedor);
         int order = 1;
         for (CuentaContable c : cuentas) {
             if (c.getTipoCuenta() != TipoCuentaContableEnum.DETALLE) continue;
-            BigDecimal saldo = c.getSaldoActual() == null ? BigDecimal.ZERO : c.getSaldoActual().abs();
-            BigDecimal deudor = c.getNaturalezaSaldo() == NaturalezaSaldoEnum.DEUDORA ? saldo : BigDecimal.ZERO;
-            BigDecimal acreedor = c.getNaturalezaSaldo() == NaturalezaSaldoEnum.ACREEDORA ? saldo : BigDecimal.ZERO;
-            balance.agregarDetalle(BalanceComprobacionDetalle.crear(c, deudor, acreedor, order++));
+            balance.agregarDetalle(BalanceComprobacionDetalle.crear(
+                    c, saldoDeudor(c), saldoAcreedor(c), order++));
         }
         return balanceRepository.save(balance);
+    }
+
+    private BigDecimal saldoDeudor(CuentaContable cuenta) {
+        BigDecimal saldo = cuenta.getSaldoActual() == null ? BigDecimal.ZERO : cuenta.getSaldoActual();
+        boolean ladoNatural = saldo.signum() >= 0;
+        boolean esDeudor = ladoNatural
+                ? cuenta.getNaturalezaSaldo() == NaturalezaSaldoEnum.DEUDORA
+                : cuenta.getNaturalezaSaldo() == NaturalezaSaldoEnum.ACREEDORA;
+        return esDeudor ? saldo.abs() : BigDecimal.ZERO;
+    }
+
+    private BigDecimal saldoAcreedor(CuentaContable cuenta) {
+        BigDecimal saldo = cuenta.getSaldoActual() == null ? BigDecimal.ZERO : cuenta.getSaldoActual();
+        boolean ladoNatural = saldo.signum() >= 0;
+        boolean esAcreedor = ladoNatural
+                ? cuenta.getNaturalezaSaldo() == NaturalezaSaldoEnum.ACREEDORA
+                : cuenta.getNaturalezaSaldo() == NaturalezaSaldoEnum.DEUDORA;
+        return esAcreedor ? saldo.abs() : BigDecimal.ZERO;
     }
 
     private CuentaContable resolveCuenta(JournalEntryLineRequest line) {
