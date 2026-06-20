@@ -60,7 +60,13 @@ banquito:
   accounting:
     default-cutoff-time: ${ACCOUNTING_DEFAULT_CUTOFF_TIME:20:00:00}
     report-directory: ${ACCOUNTING_REPORT_DIRECTORY:./reports/eod}
+    zone-id: ${ACCOUNTING_ZONE_ID:America/Guayaquil}
+    eod-window-code: ${ACCOUNTING_EOD_WINDOW_CODE:CORE_CONTABLE}
+    eod-manual-override-enabled: ${ACCOUNTING_EOD_MANUAL_OVERRIDE_ENABLED:true}
   integration:
+    admin-grpc-host: ${ADMIN_GRPC_HOST:core-admin-service}
+    admin-grpc-port: ${ADMIN_GRPC_PORT:9093}
+    grpc-timeout-ms: ${INTERNAL_GRPC_TIMEOUT_MS:10000}
     document-service-url: ${DOCUMENT_SERVICE_URL:http://document-service:8086}
     notification-service-url: ${NOTIFICATION_SERVICE_URL:http://notification-service:8087}
   grpc:

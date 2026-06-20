@@ -23,6 +23,9 @@ public class AccountingGrpcService extends AccountingServiceGrpc.AccountingServi
     @Override public void getCurrentAccountingDate(CurrentAccountingDateRequest request, StreamObserver<AccountingDateReply> observer) {
         try { var r = accountingService.obtenerFechaContableActual(); observer.onNext(AccountingDateReply.newBuilder().setAccountingDate(r.accountingDate().toString()).setStatus(r.status()).build()); observer.onCompleted(); } catch (RuntimeException ex) { fail(observer, ex); }
     }
+    @Override public void resolveOperationAccountingDate(CurrentAccountingDateRequest request, StreamObserver<AccountingDateReply> observer) {
+        try { var date = accountingService.resolverFechaContableOperacion(); observer.onNext(AccountingDateReply.newBuilder().setAccountingDate(date.toString()).setStatus("OPERABLE").build()); observer.onCompleted(); } catch (RuntimeException ex) { fail(observer, ex); }
+    }
     @Override public void createJournalEntry(CreateJournalEntryRequest request, StreamObserver<JournalEntryReply> observer) {
         try { JournalEntryRequest dto = objectMapper.readValue(request.getPayloadJson(), JournalEntryRequest.class); var r = accountingService.crearAsiento(dto); observer.onNext(JournalEntryReply.newBuilder().setJournalEntryUuid(r.journalEntryUuid()).setStatus(r.status()).build()); observer.onCompleted(); } catch (Exception ex) { fail(observer, ex); }
     }

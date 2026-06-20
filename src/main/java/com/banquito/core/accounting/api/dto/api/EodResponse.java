@@ -13,5 +13,7 @@ public record EodResponse(
         String reportDocumentUuid,
         String errorMessage,
         LocalDateTime startedAt,
-        LocalDateTime finishedAt
+        LocalDateTime finishedAt,
+        LocalDate nextAccountingDate,
+        String nextAccountingDateStatus
 ) {}
