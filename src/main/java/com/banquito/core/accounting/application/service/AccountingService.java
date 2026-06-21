@@ -253,6 +253,18 @@ public class AccountingService {
     @Transactional(readOnly = true)
     public JournalEntryResponse obtenerAsiento(String uuid) { return AccountingMapper.toJournalEntry(getAsiento(uuid)); }
 
+    @Transactional(readOnly = true)
+    public JournalEntryResponse obtenerAsientoPorTransaccion(String transactionUuid) {
+        String normalized = normalize(transactionUuid);
+        if (normalized == null) {
+            throw new BusinessException("ACCOUNTING_TRANSACTION_UUID_REQUIRED", "El UUID de transacción es obligatorio", HttpStatus.BAD_REQUEST);
+        }
+        AsientoContable asiento = asientoRepository
+                .findFirstByTransaccionUuidAndEstadoOrderByTimestampRegistroAsc(normalized, EstadoAsientoContableEnum.REGISTRADO)
+                .orElseThrow(() -> new BusinessException("ACCOUNTING_JOURNAL_BY_TRANSACTION_NOT_FOUND", "No existe asiento para la transacción indicada", HttpStatus.NOT_FOUND));
+        return AccountingMapper.toJournalEntry(asiento);
+    }
+
     @Transactional
     public JournalEntryResponse reversarAsiento(String uuid) {
         AsientoContable original = getAsiento(uuid);

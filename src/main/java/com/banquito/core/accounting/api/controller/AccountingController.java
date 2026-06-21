@@ -86,6 +86,11 @@ public class AccountingController {
                 size);
     }
 
+    @GetMapping("/journal-entries/by-transaction/{transactionUuid}")
+    public JournalEntryResponse getJournalEntryByTransaction(@PathVariable String transactionUuid) {
+        return service.obtenerAsientoPorTransaccion(transactionUuid);
+    }
+
     @GetMapping("/journal-entries/{journalEntryUuid}")
     public JournalEntryResponse getJournalEntry(@PathVariable String journalEntryUuid) { return service.obtenerAsiento(journalEntryUuid); }
 

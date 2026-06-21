@@ -29,6 +29,9 @@ public class AccountingGrpcService extends AccountingServiceGrpc.AccountingServi
     @Override public void createJournalEntry(CreateJournalEntryRequest request, StreamObserver<JournalEntryReply> observer) {
         try { JournalEntryRequest dto = objectMapper.readValue(request.getPayloadJson(), JournalEntryRequest.class); var r = accountingService.crearAsiento(dto); observer.onNext(JournalEntryReply.newBuilder().setJournalEntryUuid(r.journalEntryUuid()).setStatus(r.status()).build()); observer.onCompleted(); } catch (Exception ex) { fail(observer, ex); }
     }
+    @Override public void getJournalEntryByTransactionUuid(JournalEntryByTransactionRequest request, StreamObserver<JournalEntryLookupReply> observer) {
+        try { var r = accountingService.obtenerAsientoPorTransaccion(request.getTransactionUuid()); observer.onNext(JournalEntryLookupReply.newBuilder().setFound(true).setJournalEntryUuid(r.journalEntryUuid()).setStatus(r.status()).build()); observer.onCompleted(); } catch (BusinessException ex) { if (ex.getStatus() == org.springframework.http.HttpStatus.NOT_FOUND) { observer.onNext(JournalEntryLookupReply.newBuilder().setFound(false).build()); observer.onCompleted(); } else fail(observer, ex); } catch (RuntimeException ex) { fail(observer, ex); }
+    }
     @Override public void createReversalJournalEntry(CreateReversalJournalEntryRequest request, StreamObserver<JournalEntryReply> observer) {
         try { var r = accountingService.reversarAsiento(request.getOriginalJournalEntryUuid()); observer.onNext(JournalEntryReply.newBuilder().setJournalEntryUuid(r.journalEntryUuid()).setStatus(r.status()).build()); observer.onCompleted(); } catch (RuntimeException ex) { fail(observer, ex); }
     }

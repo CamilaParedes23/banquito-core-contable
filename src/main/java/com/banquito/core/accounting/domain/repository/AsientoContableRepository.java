@@ -16,6 +16,10 @@ public interface AsientoContableRepository extends JpaRepository<AsientoContable
 
     Optional<AsientoContable> findByUuidAsiento(String uuidAsiento);
 
+    Optional<AsientoContable> findFirstByTransaccionUuidAndEstadoOrderByTimestampRegistroAsc(
+            String transaccionUuid,
+            EstadoAsientoContableEnum estado);
+
     Optional<AsientoContable> findFirstByUuidCorrelacionAndTipoOperacionAndEstadoOrderByTimestampRegistroAsc(
             String uuidCorrelacion,
             String tipoOperacion,
