@@ -24,11 +24,11 @@ jobs:
 
       - name: Build image
         run: |
-          docker build -t ${{ secrets.DOCKER_USERNAME }}/banquito-core-contable:latest -f docker/dockerfile .
+          docker build -t ${{ secrets.DOCKER_USERNAME }}/banquito-core-contable:prod -f docker/dockerfile .
 
       - name: Push image
         run: |
-          docker push ${{ secrets.DOCKER_USERNAME }}/banquito-core-contable:latest
+          docker push ${{ secrets.DOCKER_USERNAME }}/banquito-core-contable:prod
 
       - name: Trigger Infra Deploy
         run: |
